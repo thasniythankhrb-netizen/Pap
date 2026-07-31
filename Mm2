@@ -1,0 +1,620 @@
+-- Rayfield Library Setup
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Setup Sound Effect (ID: 134699420140804)
+local SoundService = game:GetService("SoundService")
+local UISound = Instance.new("Sound")
+UISound.Name = "RayfieldToggleSound"
+UISound.SoundId = "rbxassetid://134699420140804"
+UISound.Volume = 1
+UISound.Parent = SoundService
+
+-- เล่นเสียงทันที 1 ครั้งเมื่อรันสคริปต์
+UISound:Play()
+
+local Window = Rayfield:CreateWindow({
+   Name = "สคริปแมพ mm2 ผู้พัฒนาเปา tiktok:thasneohi18",
+   LoadingTitle = "สคริปแมพ mm2 กำลังโหลด...",
+   LoadingSubtitle = "โดย เปา tiktok:thasneohi18",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   Discord = {
+      Enabled = false
+   },
+   KeySystem = false
+})
+
+-- ดักจับการเปิด/ปิด UI ของ Rayfield เพื่อเล่นเสียง
+pcall(function()
+    local coreGui = game:GetService("CoreGui")
+    local mainGui = coreGui:FindFirstChild("Rayfield") or LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("Rayfield")
+    if mainGui then
+        mainGui:GetPropertyChangedSignal("Enabled"):Connect(function()
+            UISound:Play()
+        end)
+    end
+end)
+
+-- Global States
+_G.RoleESP = false
+_G.GunESP = false
+_G.SilentAim = false
+_G.FlingTarget = nil
+_G.ShowTimer = false
+_G.AutoKillAll = false
+_G.AutoThrowKnife = false
+
+-- Services & Player Setup
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Helper Function: Check Player Roles
+local function GetPlayerRole(plr)
+    if not plr or not plr.Character then return "Innocent" end
+    if plr.Backpack:FindFirstChild("Knife") or plr.Character:FindFirstChild("Knife") then
+        return "Murderer"
+    elseif plr.Backpack:FindFirstChild("Gun") or plr.Character:FindFirstChild("Gun") then
+        return "Sheriff"
+    end
+    return "Innocent"
+end
+
+-- ฟังก์ชันตรวจสอบว่าเกมเริ่มหรือยัง
+local function CheckGameStarted()
+    local coinContainer = Workspace:FindFirstChild("Normal") or Workspace:FindFirstChild("Container")
+    local hasCoins = coinContainer and coinContainer:FindFirstChild("CoinContainer") and #coinContainer.CoinContainer:GetChildren() > 0
+    
+    local hasRoleInGame = false
+    for _, plr in pairs(Players:GetPlayers()) do
+        if GetPlayerRole(plr) ~= "Innocent" then
+            hasRoleInGame = true
+            break
+        end
+    end
+
+    return hasCoins or hasRoleInGame
+end
+
+-- Screen Label for Round Timer
+local TimerGui = Instance.new("ScreenGui")
+TimerGui.Name = "MM2TimerGui_Pao"
+TimerGui.ResetOnSpawn = false
+pcall(function() TimerGui.Parent = game:GetService("CoreGui") end)
+if not TimerGui.Parent then TimerGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+
+local TimerLabel = Instance.new("TextLabel")
+TimerLabel.Size = UDim2.new(0, 260, 0, 38)
+TimerLabel.Position = UDim2.new(0.5, -130, 0, 15)
+TimerLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+TimerLabel.BackgroundTransparency = 0.2
+TimerLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+TimerLabel.TextSize = 14
+TimerLabel.Font = Enum.Font.GothamMedium
+TimerLabel.Text = "⏱️ show round time (จับเวลาจบเกม): 03:00"
+TimerLabel.Visible = false
+TimerLabel.Parent = TimerGui
+
+local TimerCorner = Instance.new("UICorner")
+TimerCorner.CornerRadius = UDim.new(0, 8)
+TimerCorner.Parent = TimerLabel
+
+local TimerStroke = Instance.new("UIStroke")
+TimerStroke.Color = Color3.fromRGB(255, 215, 0)
+TimerStroke.Thickness = 1
+TimerStroke.Transparency = 0.3
+TimerStroke.Parent = TimerLabel
+
+-- TABS
+local MainTab = Window:CreateTab("Main Features", 4483362458)
+local MurdererTab = Window:CreateTab("Murderer Features", 4483362458)
+local ESPTab = Window:CreateTab("Visuals / ESP", 4483362458)
+local TrollTab = Window:CreateTab("Troll / Fling", 4483362458)
+
+----------------------------------------------------
+-- MURDERER FEATURES TAB (เมนูสำหรับฆาตกร)
+----------------------------------------------------
+
+-- 1. Auto Kill All
+MurdererTab:CreateToggle({
+   Name = "🩸 Auto Kill All (ฆาตกรฟันผู้เล่นทุกคนออโต้)",
+   CurrentValue = false,
+   Flag = "AutoKillAllFlag",
+   Callback = function(Value)
+      _G.AutoKillAll = Value
+   end,
+})
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if _G.AutoKillAll then
+            pcall(function()
+                local myChar = LocalPlayer.Character
+                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                local myHum = myChar and myChar:FindFirstChild("Humanoid")
+                local knife = myChar and myChar:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
+                
+                if knife and myHRP and myHum and myHum.Health > 0 then
+                    if knife.Parent == LocalPlayer.Backpack then
+                        myHum:EquipTool(knife)
+                        task.wait(0.1)
+                    end
+                    
+                    for _, target in pairs(Players:GetPlayers()) do
+                        if not _G.AutoKillAll then break end
+                        if target ~= LocalPlayer and target.Character then
+                            local tHRP = target.Character:FindFirstChild("HumanoidRootPart")
+                            local tHum = target.Character:FindFirstChild("Humanoid")
+                            
+                            while _G.AutoKillAll and tHRP and tHum and tHum.Health > 0 and myHum.Health > 0 do
+                                myHRP.CFrame = tHRP.CFrame * CFrame.new(0, 0, 1.2)
+                                knife:Activate()
+                                task.wait(0.05)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- 2. Auto Throw Knife
+MurdererTab:CreateToggle({
+   Name = "🎯 Auto Throw Knife (ปามีดออโต้ใส่คนใกล้ที่สุด)",
+   CurrentValue = false,
+   Flag = "AutoThrowKnifeFlag",
+   Callback = function(Value)
+      _G.AutoThrowKnife = Value
+   end,
+})
+
+-- ฟังก์ชันค้นหาผู้เล่นที่ใกล้ที่สุด
+local function GetClosestPlayer()
+    local closestPlr = nil
+    local shortestDist = math.huge
+    local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if myHRP then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+                local dist = (myHRP.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    closestPlr = plr
+                end
+            end
+        end
+    end
+    return closestPlr
+end
+
+-- Loop ปามีดออโต้
+task.spawn(function()
+    while task.wait(0.3) do
+        if _G.AutoThrowKnife then
+            pcall(function()
+                local myChar = LocalPlayer.Character
+                local knife = myChar and myChar:FindFirstChild("Knife") or LocalPlayer.Backpack:FindFirstChild("Knife")
+                
+                if knife then
+                    if knife.Parent == LocalPlayer.Backpack then
+                        myChar.Humanoid:EquipTool(knife)
+                        task.wait(0.1)
+                    end
+                    
+                    local target = GetClosestPlayer()
+                    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetHRP = target.Character.HumanoidRootPart
+                        local throwRemote = knife:FindFirstChild("Throw") or ReplicatedStorage:FindFirstChild("ThrowKnife", true)
+                        
+                        if throwRemote then
+                            if throwRemote:IsA("RemoteEvent") then
+                                throwRemote:FireServer(targetHRP.Position, (targetHRP.Position - knife.Handle.Position).Unit * 100)
+                            elseif throwRemote:IsA("BindableEvent") then
+                                throwRemote:Fire(targetHRP.Position)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+----------------------------------------------------
+-- VISUALS / ESP TAB
+----------------------------------------------------
+
+-- 1. Role ESP
+ESPTab:CreateToggle({
+   Name = "Player Role ESP (มองทะลุแยกสี)",
+   CurrentValue = false,
+   Flag = "RoleESPFlag",
+   Callback = function(Value)
+      _G.RoleESP = Value
+      if not Value then
+          for _, plr in pairs(Players:GetPlayers()) do
+              if plr.Character and plr.Character:FindFirstChild("RoleHighlight") then
+                  plr.Character.RoleHighlight:Destroy()
+              end
+          end
+      end
+   end,
+})
+
+-- Role ESP Loop
+RunService.RenderStepped:Connect(function()
+    if _G.RoleESP then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local highlight = plr.Character:FindFirstChild("RoleHighlight")
+                if not highlight then
+                    highlight = Instance.new("Highlight")
+                    highlight.Name = "RoleHighlight"
+                    highlight.FillTransparency = 0.5
+                    highlight.OutlineTransparency = 0
+                    highlight.Parent = plr.Character
+                end
+
+                local role = GetPlayerRole(plr)
+                if role == "Murderer" then
+                    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                elseif role == "Sheriff" then
+                    highlight.FillColor = Color3.fromRGB(0, 120, 255)
+                else
+                    highlight.FillColor = Color3.fromRGB(0, 255, 100)
+                end
+            end
+        end
+    end
+end)
+
+-- 2. Dropped Gun ESP (แสดงข้อความ "ปืนตก")
+ESPTab:CreateToggle({
+   Name = "Dropped Gun ESP (ข้อความปืนตก)",
+   CurrentValue = false,
+   Flag = "GunESPFlag",
+   Callback = function(Value)
+      _G.GunESP = Value
+      if not Value then
+          for _, obj in pairs(Workspace:GetDescendants()) do
+              if obj.Name == "GunDropBillboard" then 
+                  obj:Destroy() 
+              end
+          end
+      end
+   end,
+})
+
+-- ฟังก์ชันสร้าง BillboardGui แสดงข้อความ "ปืนตก"
+local function CreateGunText(gunObj)
+    if not gunObj:FindFirstChild("GunDropBillboard") then
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "GunDropBillboard"
+        billboard.AlwaysOnTop = true
+        billboard.Size = UDim2.new(0, 120, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 2, 0)
+        billboard.Parent = gunObj
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.Text = "🔫 ปืนตก!"
+        textLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+        textLabel.TextStrokeTransparency = 0
+        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        textLabel.TextSize = 18
+        textLabel.Font = Enum.Font.SourceSansBold
+        textLabel.Parent = billboard
+    end
+end
+
+-- Loop ตรวจจับปืนตกบนพื้น
+task.spawn(function()
+    while task.wait(0.2) do
+        if _G.GunESP then
+            pcall(function()
+                for _, obj in pairs(Workspace:GetDescendants()) do
+                    if obj.Name == "GunDrop" and obj:IsA("BasePart") then
+                        CreateGunText(obj)
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- 3. show round time (จับเวลาจบเกม)
+ESPTab:CreateToggle({
+   Name = "show round time (จับเวลาจบเกม)",
+   CurrentValue = false,
+   Flag = "ShowTimerFlag",
+   Callback = function(Value)
+      _G.ShowTimer = Value
+      TimerLabel.Visible = Value
+   end,
+})
+
+-- Logic ตรวจจับการเริ่มเกม + จับเวลา 3 นาที
+local roundStartTime = nil
+local inRound = false
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if _G.ShowTimer then
+            local isGameActive = CheckGameStarted()
+
+            if isGameActive then
+                if not inRound then
+                    inRound = true
+                    roundStartTime = tick()
+                end
+
+                local elapsed = tick() - roundStartTime
+                local timeLeft = math.max(0, 180 - math.floor(elapsed))
+
+                local m = math.floor(timeLeft / 60)
+                local s = math.floor(timeLeft % 60)
+                TimerLabel.Text = string.format("⏱️ show round time (จับเวลาจบเกม): %02d:%02d", m, s)
+                
+                if timeLeft <= 30 then
+                    TimerLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+                else
+                    TimerLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+                end
+            else
+                inRound = false
+                roundStartTime = nil
+                TimerLabel.Text = "⏱️ รอเริ่มรอบใหม่..."
+                TimerLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+            end
+        end
+    end
+end)
+
+----------------------------------------------------
+-- MAIN FEATURES TAB
+----------------------------------------------------
+
+-- Silent Aim (ล็อกเป้าเฉพาะฆาตกรเท่านั้น)
+MainTab:CreateToggle({
+   Name = "Silent Aim Murderer (ล็อกเป้าเฉพาะฆาตกร)",
+   CurrentValue = false,
+   Flag = "SilentAimFlag",
+   Callback = function(Value)
+      _G.SilentAim = Value
+   end,
+})
+
+-- ฟังก์ชันระบุเป้าหมาย: ค้นหาเฉพาะผู้เล่นที่เป็น ฆาตกร (Murderer)
+local function GetMurdererTarget()
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and GetPlayerRole(plr) == "Murderer" then
+            if plr.Character and plr.Character:FindFirstChild("Humanoid") and plr.Character.Humanoid.Health > 0 then
+                local targetPart = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+                if targetPart then
+                    return targetPart
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Silent Aim Hook
+local Meta = getrawmetatable(game)
+local OldNamecall = Meta.__namecall
+setreadonly(Meta, false)
+
+Meta.__namecall = newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+
+    if _G.SilentAim and method == "FireServer" and tostring(self) == "ShootGun" then
+        local targetPart = GetMurdererTarget()
+        if targetPart then
+            args[2] = targetPart.Position
+            return OldNamecall(self, unpack(args))
+        end
+    end
+
+    return OldNamecall(self, ...)
+end)
+setreadonly(Meta, true)
+
+-- Loop ตรวจจับปืนและยิงล็อคเป้าฆาตกรอัตโนมัติ
+task.spawn(function()
+    while task.wait(0.2) do
+        if _G.SilentAim then
+            pcall(function()
+                local targetPart = GetMurdererTarget()
+                local char = LocalPlayer.Character
+                
+                if targetPart and char then
+                    local gun = char:FindFirstChild("Gun") or LocalPlayer.Backpack:FindFirstChild("Gun")
+                    
+                    if gun then
+                        if gun.Parent == LocalPlayer.Backpack then
+                            char.Humanoid:EquipTool(gun)
+                            task.wait(0.1)
+                        end
+                        
+                        local shootRemote = ReplicatedStorage:FindFirstChild("ShootGun", true)
+                        if shootRemote then
+                            shootRemote:FireServer(1, targetPart.Position, CFrame.new())
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- Teleport to Gun Drop & Return Back
+MainTab:CreateButton({
+   Name = "⚡ วาร์ปไปเก็บปืนแล้ววาร์ปกลับทันที (TP to Gun & Return)",
+   Callback = function()
+      pcall(function()
+          local char = LocalPlayer.Character
+          local hrp = char and char:FindFirstChild("HumanoidRootPart")
+          
+          if hrp then
+              local gunDrop = nil
+              for _, obj in pairs(Workspace:GetDescendants()) do
+                  if obj.Name == "GunDrop" and obj:IsA("BasePart") then
+                      gunDrop = obj
+                      break
+                  end
+              end
+
+              if gunDrop then
+                  local originalCFrame = hrp.CFrame
+                  hrp.CFrame = gunDrop.CFrame
+                  task.wait(0.15)
+                  hrp.CFrame = originalCFrame
+                  
+                  Rayfield:Notify({Title = "Success", Content = "เก็บปืนแล้ววาร์ปกลับจุดเดิมเรียบร้อย!", Duration = 2})
+              else
+                  Rayfield:Notify({Title = "Warning", Content = "ไม่พบปืนตกในแมพ!", Duration = 3})
+              end
+          end
+      end)
+   end,
+})
+
+----------------------------------------------------
+-- TROLL / FLING TAB (เตะคนออกจากแมพ)
+----------------------------------------------------
+
+local PlayerList = {}
+for _, plr in pairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        table.insert(PlayerList, plr.Name)
+    end
+end
+
+local PlayerDropdown = TrollTab:CreateDropdown({
+   Name = "เลือกผู้เล่นที่จะ Fling",
+   Options = PlayerList,
+   CurrentOption = "",
+   MultipleOptions = false,
+   Flag = "FlingPlayerDropdown",
+   Callback = function(Option)
+      if type(Option) == "table" then
+         _G.FlingTarget = Option[1]
+      else
+         _G.FlingTarget = Option
+      end
+   end,
+})
+
+Players.PlayerAdded:Connect(function(plr)
+    task.wait(1)
+    local newList = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(newList, p.Name) end
+    end
+    PlayerDropdown:Set(newList)
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    task.wait(1)
+    local newList = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then table.insert(newList, p.Name) end
+    end
+    PlayerDropdown:Set(newList)
+end)
+
+local function FlingPlayer(targetPlr)
+    if not targetPlr or not targetPlr.Character or not targetPlr.Character:FindFirstChild("HumanoidRootPart") then
+        Rayfield:Notify({Title = "Error", Content = "ไม่พบตัวละครเป้าหมาย!", Duration = 3})
+        return
+    end
+
+    local myChar = LocalPlayer.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    local TargetHRP = targetPlr.Character.HumanoidRootPart
+    local oldCFrame = myHRP.CFrame
+
+    local bV = Instance.new("BodyVelocity")
+    bV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+    bV.Velocity = Vector3.new(99999, 99999, 99999)
+    bV.Parent = myHRP
+
+    local connection
+    local startTime = tick()
+
+    connection = RunService.Heartbeat:Connect(function()
+        if tick() - startTime > 1.5 or not TargetHRP or not TargetHRP.Parent then
+            connection:Disconnect()
+            bV:Destroy()
+            myHRP.Velocity = Vector3.new(0, 0, 0)
+            myHRP.CFrame = oldCFrame
+            return
+        end
+        myHRP.CFrame = TargetHRP.CFrame * CFrame.Angles(math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)), math.rad(math.random(-180, 180)))
+        myHRP.Velocity = Vector3.new(99999, 99999, 99999)
+    end)
+end
+
+TrollTab:CreateButton({
+   Name = "🚀 Fling Target (เตะคนเลือกกระเด็น)",
+   Callback = function()
+      if _G.FlingTarget then
+          local targetObj = Players:FindFirstChild(_G.FlingTarget)
+          if targetObj then
+              FlingPlayer(targetObj)
+          end
+      else
+          Rayfield:Notify({Title = "Warning", Content = "โปรดเลือกชื่อผู้เล่นก่อน!", Duration = 3})
+      end
+   end,
+})
+
+TrollTab:CreateButton({
+   Name = "🔪 Fling Murderer (เตะฆาตกรทิ้ง)",
+   Callback = function()
+      local found = false
+      for _, plr in pairs(Players:GetPlayers()) do
+          if plr ~= LocalPlayer and GetPlayerRole(plr) == "Murderer" then
+              FlingPlayer(plr)
+              found = true
+              break
+          end
+      end
+      if not found then
+          Rayfield:Notify({Title = "Warning", Content = "ไม่พบฆาตกรในรอบนี้!", Duration = 3})
+      end
+   end,
+})
+
+TrollTab:CreateButton({
+   Name = "👮 Fling Sheriff (เตะนายอำเภอทิ้ง)",
+   Callback = function()
+      local found = false
+      for _, plr in pairs(Players:GetPlayers()) do
+          if plr ~= LocalPlayer and GetPlayerRole(plr) == "Sheriff" then
+              FlingPlayer(plr)
+              found = true
+              break
+          end
+      end
+      if not found then
+          Rayfield:Notify({Title = "Warning", Content = "ไม่พบนายอำเภอในรอบนี้!", Duration = 3})
+      end
+   end,
+})
+
+Rayfield:Notify({
+   Title = "สคริปแมพ mm2",
+   Content = "ย้ายฟังก์ชันไปที่แท็บ Murderer Features เรียบร้อยแล้ว!",
+   Duration = 4,
+   Image = 4483362458,
+})
